@@ -1,106 +1,151 @@
 <template>
-  <div class="chat-page">
-    <!-- 消息区 -->
-    <div ref="messagesEl" class="messages">
-      <div
-        v-for="(msg, index) in messages"
-        :key="index"
-        :class="['message-row', msg.role]"
-      >
-        <div v-if="msg.role === 'assistant'" class="avatar">🤖</div>
+  <div class="app-layout">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <h1 class="header-title">自然语言转 SQL 助手</h1>
+        <p class="header-sub">基调听云 AI 研发工程师实操题 · 题目二</p>
+      </div>
+      <div class="header-right">
+        <div class="header-candidate">候选人：姜萌</div>
+        <div class="header-tags">
+          <span class="htag">SELECT only</span>
+          <span class="htag">LIMIT enforced</span>
+          <span class="htag">Manual confirm</span>
+          <span class="htag">CSV export</span>
+        </div>
+      </div>
+    </header>
 
-        <div class="bubble">
-          <!-- 文本 -->
-          <div v-if="msg.type === 'text'">
-            {{ msg.content }}
-          </div>
-
-          <!-- 进度步骤 -->
-          <div v-else-if="msg.type === 'steps'" class="steps">
-            <div v-for="(step, sIdx) in msg.steps" :key="sIdx" class="step">
-              <span class="dot" :class="step.status"></span>
-              <span>{{ step.text }}</span>
-            </div>
-          </div>
-
-          <!-- SQL 预览 -->
-          <div v-else-if="msg.type === 'preview'" class="preview-block">
-            <div class="preview-header">
-              <span class="preview-title">SQL 预览</span>
-              <span :class="['safety-badge', msg.safety_status]">
-                {{ msg.safety_status === 'safe' ? '✅ 安全' : '🚫 已拦截' }}
-              </span>
-            </div>
-
-            <pre class="sql-preview"><code>{{ msg.sql }}</code></pre>
-
-            <div v-if="msg.explanation" class="explanation">
-              <strong>生成说明：</strong>{{ msg.explanation }}
-            </div>
-
-            <div v-if="msg.involved_tables.length" class="meta-info">
-              <span><strong>涉及表：</strong>{{ msg.involved_tables.join(', ') }}</span>
-            </div>
-
-            <div v-if="msg.involved_columns.length" class="meta-info">
-              <span><strong>涉及字段：</strong>{{ msg.involved_columns.join(', ') }}</span>
-            </div>
-
-            <div v-if="msg.error_message" class="error-text">
-              {{ msg.error_message }}
-            </div>
-
-            <div v-if="msg.executable" class="confirm-area">
-              <button class="confirm-btn" @click="executeQuery(msg.query_id)" :disabled="executing">
-                {{ executing ? '执行中...' : '确认执行' }}
-              </button>
-            </div>
-          </div>
-
-          <!-- 表格结果 -->
-          <div v-else-if="msg.type === 'table'" class="table-block">
-            <div class="table-header">
-              <span>查询结果（{{ msg.row_count }} 行）</span>
-              <button class="csv-btn" @click="exportCSV(msg)">📥 导出 CSV</button>
-            </div>
-            <div class="table-wrap">
-              <table class="result-table">
-                <thead>
-                  <tr>
-                    <th v-for="col in msg.columns" :key="col">{{ col }}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="(row, rIdx) in msg.rows" :key="rIdx">
-                    <td v-for="(col, cIdx) in msg.columns" :key="col">{{ row[cIdx] }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <!-- 错误 -->
-          <div v-else-if="msg.type === 'error'" class="error-text">
-            {{ msg.content }}
-          </div>
+    <!-- Main -->
+    <div class="main-area">
+      <!-- Messages -->
+      <div ref="messagesEl" class="messages">
+        <!-- Empty state -->
+        <div v-if="messages.length === 0" class="empty-state">
+          <div class="empty-icon">SQL</div>
+          <p class="empty-title">输入自然语言问题，自动生成 SQL 并查询</p>
+          <p class="empty-desc">支持中文 / 英文，自动 Schema 召回、安全校验、预览确认</p>
         </div>
 
-        <div v-if="msg.role === 'user'" class="avatar">🧑</div>
-      </div>
-      <div class="messages-bottom-spacer"></div>
-    </div>
+        <div
+          v-for="(msg, index) in messages"
+          :key="index"
+          :class="['message-row', msg.role]"
+        >
+          <div v-if="msg.role === 'assistant'" class="avatar assistant-avatar">AI</div>
 
-    <!-- 悬浮输入框 -->
-    <div class="input-wrapper">
-      <div class="input-box">
-        <input
-          v-model="question"
-          @keyup.enter="sendQuestion"
-          placeholder="请输入你的问题，例如：统计各地区的销售总额"
-        />
-        <button @click="sendQuestion" :disabled="loading">
-          {{ loading ? '生成中...' : '发送' }}
-        </button>
+          <div class="bubble">
+            <!-- Text -->
+            <div v-if="msg.type === 'text'" class="text-content">
+              {{ msg.content }}
+            </div>
+
+            <!-- Steps -->
+            <div v-else-if="msg.type === 'steps'" class="steps">
+              <div v-for="(step, sIdx) in msg.steps" :key="sIdx" class="step">
+                <span class="dot" :class="step.status"></span>
+                <span class="step-label">{{ step.text }}</span>
+              </div>
+            </div>
+
+            <!-- SQL Preview -->
+            <div v-else-if="msg.type === 'preview'" class="preview-card">
+              <div class="preview-top">
+                <span class="preview-label">SQL Preview</span>
+                <span :class="['status-tag', msg.safety_status]">
+                  {{ msg.safety_status === 'safe' ? 'SAFE' : msg.safety_status === 'blocked' ? 'BLOCKED' : 'PENDING' }}
+                </span>
+              </div>
+
+              <pre class="sql-block"><code>{{ msg.sql }}</code></pre>
+
+              <div v-if="msg.explanation" class="preview-meta">
+                <span class="meta-label">生成说明</span>
+                <span class="meta-value">{{ msg.explanation }}</span>
+              </div>
+
+              <div v-if="msg.involved_tables.length" class="preview-meta">
+                <span class="meta-label">涉及表</span>
+                <span class="chip-list">
+                  <span class="chip" v-for="t in msg.involved_tables" :key="t">{{ t }}</span>
+                </span>
+              </div>
+
+              <div v-if="msg.involved_columns.length" class="preview-meta">
+                <span class="meta-label">涉及字段</span>
+                <span class="chip-list">
+                  <span class="chip" v-for="c in msg.involved_columns" :key="c">{{ c }}</span>
+                </span>
+              </div>
+
+              <div v-if="msg.error_message" class="error-card">
+                <span class="error-icon">!</span>
+                <span>{{ msg.error_message }}</span>
+              </div>
+
+              <div v-if="msg.executable" class="confirm-area">
+                <button class="confirm-btn" @click="executeQuery(msg.query_id)" :disabled="executing">
+                  {{ executing ? '执行中...' : '确认执行' }}
+                </button>
+              </div>
+            </div>
+
+            <!-- Table Result -->
+            <div v-else-if="msg.type === 'table'" class="table-card">
+              <div class="table-top">
+                <span class="table-label">查询结果（{{ msg.row_count }} 行）</span>
+                <button class="csv-btn" @click="exportCSV(msg)">CSV 导出</button>
+              </div>
+              <div class="table-scroll">
+                <table class="result-table">
+                  <thead>
+                    <tr>
+                      <th v-for="col in msg.columns" :key="col">{{ col }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(row, rIdx) in msg.rows" :key="rIdx">
+                      <td v-for="(col, cIdx) in msg.columns" :key="col">{{ row[cIdx] }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Error -->
+            <div v-else-if="msg.type === 'error'" class="error-card">
+              <span class="error-icon">!</span>
+              <span>{{ msg.content }}</span>
+            </div>
+          </div>
+
+          <div v-if="msg.role === 'user'" class="avatar user-avatar">U</div>
+        </div>
+        <div class="messages-bottom-spacer"></div>
+      </div>
+
+      <!-- Input Area -->
+      <div class="input-area">
+        <div class="quick-btns">
+          <button
+            v-for="q in quickQuestions"
+            :key="q"
+            class="quick-btn"
+            @click="question = q; sendQuestion()"
+            :disabled="loading"
+          >{{ q }}</button>
+        </div>
+        <div class="input-box">
+          <input
+            v-model="question"
+            @keyup.enter="sendQuestion"
+            placeholder="输入自然语言问题，例如：统计各地区的销售总额"
+          />
+          <button class="send-btn" @click="sendQuestion" :disabled="loading">
+            {{ loading ? '生成中...' : '发送' }}
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -117,6 +162,13 @@ const loading = ref(false);
 const executing = ref(false);
 const messages = ref([]);
 const messagesEl = ref(null);
+
+const quickQuestions = [
+  "统计所有订单的销售总额",
+  "按地区统计销售总额",
+  "统计2025年1月各商品品牌的销售额",
+  "DROP TABLE fact_order",
+];
 
 function scrollToBottom() {
   const el = messagesEl.value;
@@ -312,43 +364,130 @@ function exportCSV(msg) {
 </script>
 
 <style scoped>
-/* 覆盖 Vite 默认居中 */
-:global(html),
-:global(body) {
-  height: 100%;
-  margin: 0;
-}
-
-:global(body) {
-  display: block !important;
-  place-items: unset !important;
-}
-
-:global(#app) {
-  height: 100%;
-  max-width: none !important;
-  margin: 0 !important;
-  padding: 0 !important;
-}
-
-/* 页面 */
-.chat-page {
-  height: 100%;
-  overflow: hidden;
-  background: #f0f2f5;
+/* ===== Layout ===== */
+.app-layout {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #f5f6f8;
   color: #1a1a1a;
+  font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
-/* 消息区 */
+/* ===== Header ===== */
+.app-header {
+  height: 64px;
+  padding: 0 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fff;
+  border-bottom: 1px solid #e8e9ec;
+  flex-shrink: 0;
+}
+
+.header-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a1a1a;
+  letter-spacing: 0.5px;
+}
+
+.header-sub {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: #8c8c8c;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.header-candidate {
+  font-size: 13px;
+  color: #555;
+  font-weight: 500;
+}
+
+.header-tags {
+  display: flex;
+  gap: 6px;
+}
+
+.htag {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: #f0f1f3;
+  color: #666;
+  border: 1px solid #e2e3e6;
+  font-weight: 500;
+}
+
+/* ===== Main ===== */
+.main-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ===== Messages ===== */
 .messages {
-  height: 100%;
+  flex: 1;
   overflow-y: auto;
-  padding: 20px 20% 160px;
+  padding: 24px 20% 20px;
 }
 
+.messages-bottom-spacer {
+  height: 200px;
+}
+
+/* Empty state */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 60%;
+  text-align: center;
+}
+
+.empty-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  background: #e8e9ec;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+  color: #999;
+  margin-bottom: 16px;
+  font-family: "Consolas", "Fira Code", monospace;
+}
+
+.empty-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+.empty-desc {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: #999;
+}
+
+/* ===== Message Row ===== */
 .message-row {
   display: flex;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
 .message-row.assistant {
@@ -359,32 +498,53 @@ function exportCSV(msg) {
   justify-content: flex-end;
 }
 
+/* ===== Avatar ===== */
 .avatar {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  background: #e0e0e0;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   margin: 0 10px;
-  font-size: 16px;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
 }
 
+.assistant-avatar {
+  background: #1a1a1a;
+  color: #fff;
+}
+
+.user-avatar {
+  background: #409eff;
+  color: #fff;
+}
+
+/* ===== Bubble ===== */
 .bubble {
-  max-width: min(820px, 72%);
-  padding: 12px 14px;
+  max-width: min(780px, 72%);
+  padding: 14px 16px;
   border-radius: 12px;
   background: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e8e9ec;
 }
 
 .message-row.user .bubble {
   background: #409eff;
   color: #fff;
+  border-color: #409eff;
+  box-shadow: 0 1px 4px rgba(64, 158, 255, 0.2);
 }
 
-/* 步骤 */
+.text-content {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* ===== Steps ===== */
 .steps {
   display: flex;
   flex-direction: column;
@@ -398,105 +558,171 @@ function exportCSV(msg) {
   font-size: 13px;
 }
 
+.step-label {
+  color: #555;
+}
+
 .dot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
 }
 
 .dot.running {
-  background: #f1c40f;
+  background: #faad14;
 }
 
 .dot.success {
-  background: #2ecc71;
+  background: #52c41a;
 }
 
 .dot.error {
-  background: #e74c3c;
+  background: #ff4d4f;
 }
 
-/* SQL 预览 */
-.preview-block {
+/* ===== Preview Card ===== */
+.preview-card {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
-.preview-header {
+.preview-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
-.preview-title {
+.preview-label {
+  font-size: 13px;
   font-weight: 600;
-  font-size: 15px;
+  color: #333;
 }
 
-.safety-badge {
+.status-tag {
+  font-size: 11px;
   padding: 2px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
+  border-radius: 4px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
 }
 
-.safety-badge.safe {
-  background: #d4edda;
-  color: #155724;
+.status-tag.safe {
+  background: #f6ffed;
+  color: #389e0d;
+  border: 1px solid #b7eb8f;
 }
 
-.safety-badge.blocked {
-  background: #f8d7da;
-  color: #721c24;
+.status-tag.blocked {
+  background: #fff2f0;
+  color: #cf1322;
+  border: 1px solid #ffa39e;
 }
 
-.sql-preview {
-  background: #1e1e1e;
-  color: #d4d4d4;
-  padding: 12px 14px;
+.status-tag.pending {
+  background: #fffbe6;
+  color: #d48806;
+  border: 1px solid #ffe58f;
+}
+
+.sql-block {
+  margin: 0;
+  padding: 14px 16px;
+  background: #1b1b1f;
+  color: #e0e0e0;
   border-radius: 8px;
   overflow-x: auto;
   font-size: 13px;
-  line-height: 1.5;
-  margin: 0;
+  line-height: 1.6;
+  font-family: "Consolas", "Fira Code", "Courier New", monospace;
+  border: 1px solid #2d2d30;
 }
 
-.sql-preview code {
-  font-family: "Fira Code", "Consolas", monospace;
-}
-
-.explanation {
+.preview-meta {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   font-size: 13px;
+}
+
+.meta-label {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: #8c8c8c;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding-top: 2px;
+}
+
+.meta-value {
   color: #555;
   line-height: 1.5;
 }
 
-.meta-info {
-  font-size: 12px;
-  color: #777;
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
-/* 确认按钮 */
+.chip {
+  font-size: 12px;
+  padding: 1px 8px;
+  border-radius: 4px;
+  background: #f0f1f3;
+  color: #555;
+  border: 1px solid #e2e3e6;
+}
+
+/* ===== Error Card ===== */
+.error-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #fff2f0;
+  border: 1px solid #ffa39e;
+  border-radius: 8px;
+  color: #cf1322;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.error-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #ff4d4f;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* ===== Confirm ===== */
 .confirm-area {
-  margin-top: 8px;
+  margin-top: 4px;
 }
 
 .confirm-btn {
-  padding: 8px 24px;
-  border-radius: 8px;
+  padding: 8px 28px;
+  border-radius: 6px;
   border: none;
-  background: linear-gradient(135deg, #67c23a, #85ce61);
+  background: #52c41a;
   color: #fff;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: opacity 0.2s;
+  transition: background 0.2s;
 }
 
 .confirm-btn:hover {
-  opacity: 0.9;
+  background: #73d13d;
 }
 
 .confirm-btn:disabled {
@@ -504,94 +730,134 @@ function exportCSV(msg) {
   cursor: not-allowed;
 }
 
-/* 表格 */
-.table-block {
+/* ===== Table Card ===== */
+.table-card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
-.table-header {
+.table-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.table-label {
   font-size: 13px;
-  color: #555;
+  font-weight: 600;
+  color: #333;
 }
 
 .csv-btn {
-  padding: 4px 12px;
+  padding: 4px 14px;
   border-radius: 6px;
-  border: 1px solid #ddd;
+  border: 1px solid #d9d9d9;
   background: #fff;
   font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
-  transition: background 0.2s;
+  color: #555;
+  transition: all 0.2s;
 }
 
 .csv-btn:hover {
-  background: #f5f5f5;
+  border-color: #409eff;
+  color: #409eff;
 }
 
-.table-wrap {
+.table-scroll {
   max-width: 100%;
   overflow-x: auto;
+  border: 1px solid #e8e9ec;
+  border-radius: 8px;
 }
 
 .result-table {
   width: max-content;
   min-width: 100%;
-  table-layout: auto;
   border-collapse: collapse;
 }
 
 .result-table th,
 .result-table td {
-  border: 1px solid #ddd;
-  padding: 6px 12px;
+  padding: 8px 14px;
   white-space: nowrap;
   font-size: 13px;
   text-align: left;
+  border-bottom: 1px solid #f0f0f0;
 }
 
 .result-table th {
   background: #fafafa;
   font-weight: 600;
+  color: #333;
   position: sticky;
   top: 0;
   z-index: 1;
+  border-bottom: 1px solid #e8e9ec;
 }
 
-/* 错误 */
-.error-text {
-  color: #e74c3c;
-  font-weight: 600;
+.result-table tbody tr:hover {
+  background: #f5f7fa;
 }
 
-/* 悬浮输入框 */
-.input-wrapper {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 24px;
+.result-table td {
+  color: #555;
+}
+
+/* ===== Input Area ===== */
+.input-area {
+  flex-shrink: 0;
+  padding: 12px 20% 20px;
+  background: linear-gradient(to top, #f5f6f8 60%, transparent);
+}
+
+.quick-btns {
   display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
   justify-content: center;
-  padding: 0 16px;
-  pointer-events: none;
+}
+
+.quick-btn {
+  padding: 5px 14px;
+  border-radius: 6px;
+  border: 1px solid #d9d9d9;
+  background: #fff;
+  font-size: 12px;
+  color: #555;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.quick-btn:hover {
+  border-color: #409eff;
+  color: #409eff;
+  background: #f0f7ff;
+}
+
+.quick-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .input-box {
-  pointer-events: auto;
-  width: 100%;
-  max-width: 720px;
   display: flex;
-  gap: 12px;
-  padding: 14px 16px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid #d9d9d9;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  transition: border-color 0.2s;
+}
+
+.input-box:focus-within {
+  border-color: #409eff;
+  box-shadow: 0 2px 12px rgba(64, 158, 255, 0.12);
 }
 
 .input-box input {
@@ -599,23 +865,74 @@ function exportCSV(msg) {
   border: none;
   outline: none;
   background: transparent;
-  font-size: 15px;
+  font-size: 14px;
+  color: #1a1a1a;
 }
 
-.input-box button {
-  padding: 8px 18px;
-  border-radius: 999px;
+.input-box input::placeholder {
+  color: #bfbfbf;
+}
+
+.send-btn {
+  padding: 6px 20px;
+  border-radius: 6px;
   border: none;
-  background: linear-gradient(135deg, #409eff, #66b1ff);
+  background: #409eff;
   color: #fff;
+  font-size: 14px;
+  font-weight: 500;
   cursor: pointer;
+  transition: background 0.2s;
 }
 
-.input-box button:disabled {
+.send-btn:hover {
+  background: #66b1ff;
+}
+
+.send-btn:disabled {
   opacity: 0.5;
+  cursor: not-allowed;
 }
 
-.messages-bottom-spacer {
-  height: 200px;
+/* ===== Responsive ===== */
+@media (max-width: 768px) {
+  .app-header {
+    height: auto;
+    padding: 12px 16px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .header-right {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .header-tags {
+    flex-wrap: wrap;
+  }
+
+  .messages {
+    padding: 16px 12px 16px;
+  }
+
+  .input-area {
+    padding: 10px 12px 16px;
+  }
+
+  .bubble {
+    max-width: 85%;
+  }
+
+  .quick-btns {
+    gap: 6px;
+  }
+
+  .quick-btn {
+    font-size: 11px;
+    padding: 4px 10px;
+  }
 }
 </style>

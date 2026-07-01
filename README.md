@@ -1,6 +1,106 @@
 # 自然语言转 SQL 助手
 
+**在线演示**：http://114.132.76.27/
+
 基于 LangGraph Agent 和 RAG 检索增强的自然语言转 SQL 查询系统。用户输入中文或英文业务问题，系统自动生成 SQL 预览，经安全校验后执行查询并展示结果。
+
+## 示例问题（E2E 验证通过）
+
+以下三个示例均已通过端到端验证，包含 preview → execute 完整链路。
+
+### 示例 1：简单聚合
+
+**问题**：统计所有订单的销售总额
+
+**系统生成 SQL**：
+```sql
+SELECT SUM(order_amount) AS 销售总额 FROM fact_order LIMIT 1000
+```
+
+**查询结果**：1 行
+
+| 销售总额 |
+|---------|
+| 279,159.5 |
+
+### 示例 2：JOIN 多表关联
+
+**问题**：按地区统计销售总额
+
+**系统生成 SQL**：
+```sql
+SELECT dim_region.region_name, SUM(fact_order.order_amount) AS 销售总额
+FROM fact_order
+JOIN dim_region ON fact_order.region_id = dim_region.region_id
+GROUP BY dim_region.region_name
+LIMIT 1000
+```
+
+**查询结果**：5 行
+
+| 地区 | 销售总额 |
+|------|---------|
+| 华东 | 107,373.0 |
+| 华南 | 70,202.0 |
+| 华北 | 41,099.5 |
+| ... | ... |
+
+### 示例 3：时间范围查询
+
+**问题**：统计 2025 年 1 月各商品品牌的销售额
+
+**系统生成 SQL**：
+```sql
+SELECT p.brand, SUM(o.order_amount) AS 销售额
+FROM fact_order AS o
+JOIN dim_product AS p ON o.product_id = p.product_id
+WHERE o.date_id >= '20250101' AND o.date_id <= '20250131'
+GROUP BY p.brand
+ORDER BY 销售额 DESC
+LIMIT 1000
+```
+
+**查询结果**：15 行
+
+| 品牌 | 销售额 |
+|------|--------|
+| 苹果 | 35,996.0 |
+| 华为 | 20,997.0 |
+| 三星 | 18,998.0 |
+| ... | ... |
+
+## 恶意输入防护（E2E 验证通过）
+
+系统具备多层安全防护机制：
+
+### 用户意图预检
+
+系统会在发送给 LLM 之前检查用户输入是否包含明显的危险意图：
+
+```
+输入：DROP TABLE fact_order
+输出：检测到危险意图: DROP。系统仅支持只读查询，不支持数据修改或结构变更操作。
+```
+
+**验证结果**：preview 返回 `executable=false`，`safety_status=blocked`，未执行任何 SQL。
+
+### SQL 安全校验
+
+LLM 生成的 SQL 会经过确定性安全校验：
+
+| 检查项 | 说明 |
+|--------|------|
+| 语句类型 | 仅允许 SELECT |
+| 危险关键字 | 阻止 DROP/DELETE/UPDATE/INSERT/CREATE/ALTER/TRUNCATE 等 |
+| 多语句注入 | 阻止分号分隔的多条 SQL |
+| 注释绕过 | 去除注释后检查关键字 |
+| 表访问控制 | 支持白名单和黑名单，不区分大小写 |
+| 行数限制 | 自动添加或修正 LIMIT |
+
+```
+输入：DELETE FROM fact_order WHERE order_id = 1
+输出：安全检查未通过: 检测到危险关键字: DELETE，仅允许只读查询
+```
 
 ## 功能特性
 
@@ -119,84 +219,6 @@ npm run dev
 ### 8. 访问应用
 
 打开浏览器访问 `http://localhost:5173`，输入业务问题开始查询。
-
-## 示例问题
-
-### 示例 1：简单聚合
-
-**问题**：统计各地区的销售总额
-
-**参考 SQL**：
-```sql
-SELECT r.region_name, SUM(f.order_amount) AS total_sales
-FROM fact_order f
-JOIN dim_region r ON f.region_id = r.region_id
-GROUP BY r.region_name
-ORDER BY total_sales DESC
-LIMIT 1000
-```
-
-### 示例 2：多表关联
-
-**问题**：按商品品类统计各省份的订单数量
-
-**参考 SQL**：
-```sql
-SELECT r.province, p.category, COUNT(f.order_id) AS order_count
-FROM fact_order f
-JOIN dim_region r ON f.region_id = r.region_id
-JOIN dim_product p ON f.product_id = p.product_id
-GROUP BY r.province, p.category
-ORDER BY order_count DESC
-LIMIT 1000
-```
-
-### 示例 3：时间范围查询
-
-**问题**：查询 2025 年 1 月各商品品牌的月度销售额
-
-**参考 SQL**：
-```sql
-SELECT p.brand, d.month, SUM(f.order_amount) AS monthly_sales
-FROM fact_order f
-JOIN dim_product p ON f.product_id = p.product_id
-JOIN dim_date d ON f.date_id = d.date_id
-WHERE d.year = 2025 AND d.month = 1
-GROUP BY p.brand, d.month
-ORDER BY monthly_sales DESC
-LIMIT 1000
-```
-
-## 恶意输入防护
-
-系统具备多层安全防护机制：
-
-### 用户意图预检
-
-系统会在发送给 LLM 之前检查用户输入是否包含明显的危险意图：
-
-```
-输入：DROP TABLE fact_order
-输出：检测到危险意图: DROP。系统仅支持只读查询，不支持数据修改或结构变更操作。
-```
-
-### SQL 安全校验
-
-LLM 生成的 SQL 会经过确定性安全校验：
-
-| 检查项 | 说明 |
-|--------|------|
-| 语句类型 | 仅允许 SELECT |
-| 危险关键字 | 阻止 DROP/DELETE/UPDATE/INSERT/CREATE/ALTER/TRUNCATE 等 |
-| 多语句注入 | 阻止分号分隔的多条 SQL |
-| 注释绕过 | 去除注释后检查关键字 |
-| 表访问控制 | 支持白名单和黑名单，不区分大小写 |
-| 行数限制 | 自动添加或修正 LIMIT |
-
-```
-输入：DELETE FROM fact_order WHERE order_id = 1
-输出：安全检查未通过: 检测到危险关键字: DELETE，仅允许只读查询
-```
 
 ## 项目结构
 

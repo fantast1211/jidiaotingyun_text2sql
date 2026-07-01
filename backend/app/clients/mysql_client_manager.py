@@ -1,5 +1,6 @@
 import asyncio
 from typing import Optional
+from urllib.parse import quote_plus
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine, async_sessionmaker
@@ -14,7 +15,8 @@ class MysqlClientManager:
         self.session_factory = None
 
     def _get_url(self):
-        return f"mysql+asyncmy://{self.db_config.user}:{self.db_config.password}@{self.db_config.host}:{self.db_config.port}/{self.db_config.database}?charset=utf8mb4"
+        password = quote_plus(self.db_config.password)
+        return f"mysql+asyncmy://{self.db_config.user}:{password}@{self.db_config.host}:{self.db_config.port}/{self.db_config.database}?charset=utf8mb4"
 
     def init(self):
         self.engine = create_async_engine(url=self._get_url(),

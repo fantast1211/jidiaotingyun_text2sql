@@ -1,0 +1,80 @@
+# ============================================================
+# 自然语言转 SQL 助手 - 示例配置
+# ============================================================
+# 使用说明：
+# 1. 复制此文件为 backend/conf/app_config.yaml，保留占位符或填写非敏感默认值。
+# 2. 复制 .env.example 为 .env，在 .env 中填写真实凭据。
+# 3. 服务启动时会读取 .env 并覆盖本文件中的连接信息。
+# 请勿将包含真实凭据的 .env 或 app_config.yaml 提交到版本控制系统。
+
+# 日志配置
+logging:
+  file:
+    enable: true
+    level: INFO
+    path: logs
+    rotation: "10 MB"
+    retention: "7 days"
+  console:
+    enable: true
+    level: INFO
+
+# 元数据库连接（存储表/字段/指标元数据）
+db_meta:
+  host: <your-mysql-host>
+  port: 3306
+  user: <your-mysql-user>
+  password: <your-mysql-password>
+  database: meta
+
+# 数据仓库连接（存储业务数据）
+db_dw:
+  host: <your-mysql-host>
+  port: 3306
+  user: <your-mysql-user>
+  password: <your-mysql-password>
+  database: dw
+
+# Qdrant 向量数据库（用于字段和指标召回）
+qdrant:
+  host: <your-qdrant-host>
+  port: 6333
+  embedding_size: 1024
+
+# Embedding 服务（用于文本向量化）
+embedding:
+  base_url: <your-embedding-api-base-url>
+  api_key: <your-embedding-api-key>
+  model: <your-embedding-model-name>
+
+# Elasticsearch（用于字段取值召回）
+es:
+  host: <your-elasticsearch-host>
+  port: 9200
+  index_name: text2sql_values
+
+# LLM 大语言模型（用于 SQL 生成和理解）
+llm:
+  model_name: <your-llm-model-name>
+  api_key: <your-llm-api-key>
+  base_url: <your-llm-api-base-url>
+
+# SQL 安全配置
+security:
+  # 允许的 SQL 语句类型（当前仅支持 SELECT）
+  allowed_statements:
+    - SELECT
+  # 最大返回行数
+  max_rows: 1000
+  # 可见表列表（为空时允许所有非黑名单表）
+  visible_tables: []
+  # 黑名单表（优先级高于可见表列表）
+  blocked_tables:
+    - sys_config
+    - user_info
+    - admin_account
+
+# 前端配置
+ui:
+  # 是否需要执行前确认
+  confirm_before_execute: true
